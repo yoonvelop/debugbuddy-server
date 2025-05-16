@@ -1,23 +1,21 @@
-import { OpenAI } from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { NextResponse } from 'next/server';
 
 // Define types for context data
 interface DebugContext {
-  console?: string[];
-  error?: string[];
-  fetch?: {
-    url: string;
-    method: string;
-    status?: number;
-    statusText?: string;
-    [key: string]: unknown;
-  }[];
+    console?: string[];
+    error?: string[];
+    fetch?: {
+        url: string;
+        method: string;
+        status?: number;
+        statusText?: string;
+        [key: string]: unknown;
+    }[];
 }
 
-// OpenAI 클라이언트 초기화
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+// Gemini 클라이언트 초기화
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export async function POST(req: Request) {
     try {
@@ -26,23 +24,35 @@ export async function POST(req: Request) {
         // 컨텍스트 처리 및 요약
         const processedContext = processContext(context);
 
-        // OpenAI API 호출
-        const completion = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo", // 저렴한 모델 사용
-            messages: [
-                {
-                    role: "system",
-                    content: "You are a debugging assistant that helps analyze errors and provide solutions based on console logs, error messages, and network requests."
-                },
-                {
-                    role: "user",
-                    content: `${message}\n\nContext:\n${processedContext}`
-                }
-            ],
-            max_tokens: 500 // 토큰 제한으로 비용 절감
+        // Gemini 모델 설정
+        const model = genAI.getGenerativeModel({
+            model: "gemini-1.5-pro" // 또는 "gemini-1.0-pro" 등 원하는 모델
         });
 
-        return NextResponse.json({ response: completion.choices[0].message.content });
+        // Gemini API 호출
+        const result = await model.generateContent({
+            contents: [
+                {
+                    role: "user",
+                    parts: [
+                        {
+                            text: `You are a debugging assistant that helps analyze errors and provide solutions based on console logs, error messages, and network requests.
+                            
+${message}
+
+Context:
+${processedContext}`
+                        }
+                    ]
+                }
+            ],
+            generationConfig: {
+                maxOutputTokens: 1024,
+            }
+        });
+
+        const response = result.response;
+        return NextResponse.json({ response: response.text() });
     } catch (error: Error | unknown) {
         console.error('MCP API 오류:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -50,7 +60,7 @@ export async function POST(req: Request) {
     }
 }
 
-// 컨텍스트 데이터 처리 및 요약 함수
+// 컨텍스트 데이터 처리 및 요약 함수 (기존 코드 유지)
 function processContext(context: DebugContext | undefined): string {
     if (!context) return "No context provided";
 
