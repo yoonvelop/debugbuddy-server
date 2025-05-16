@@ -1,6 +1,19 @@
 import { OpenAI } from 'openai';
 import { NextResponse } from 'next/server';
 
+// Define types for context data
+interface DebugContext {
+  console?: string[];
+  error?: string[];
+  fetch?: {
+    url: string;
+    method: string;
+    status?: number;
+    statusText?: string;
+    [key: string]: unknown;
+  }[];
+}
+
 // OpenAI 클라이언트 초기화
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -30,14 +43,15 @@ export async function POST(req: Request) {
         });
 
         return NextResponse.json({ response: completion.choices[0].message.content });
-    } catch (error: any) {
+    } catch (error: Error | unknown) {
         console.error('MCP API 오류:', error);
-        return NextResponse.json({ error: error.message || 'Unknown error occurred' }, { status: 500 });
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        return NextResponse.json({ error: errorMessage }, { status: 500 });
     }
 }
 
 // 컨텍스트 데이터 처리 및 요약 함수
-function processContext(context: any): string {
+function processContext(context: DebugContext | undefined): string {
     if (!context) return "No context provided";
 
     try {
@@ -49,7 +63,8 @@ function processContext(context: any): string {
         };
 
         return JSON.stringify(result, null, 2);
-    } catch (e: any) {
-        return "Error processing context: " + (e.message || 'Unknown error');
+    } catch (e: Error | unknown) {
+        const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+        return "Error processing context: " + errorMessage;
     }
 }
